@@ -1,22 +1,24 @@
-FROM base/archlinux:latest
+#import archlinux-base-devel
+FROM base/devel:latest
 
-WORKDIR /root
+#install dependencies for kernel building
+RUN pacman -Sy git bc imagemagick xmlto python-sphinx graphviz --noconfirm
 
-# install the necessary dependencies
-#ENV DEBIAN_FRONTEND noninteractive
-#RUN apt-get update && apt-get install -y git libelf-dev bison flex build-essential ncurses-dev xz-utils libssl-dev bc kernel-package linux-virtual
+#change number of processors here
+RUN sed -i -e 's/.*MAKEFLAGS=.*/MAKEFLAGS="j16"/' /etc/makepkg.conf
 
-# copy the kernel over
-RUN git clone --depth 1 https://github.com/heikomat/linux.git --branch cx2072x --single-branch
-WORKDIR /root/linux
+#add a user other than root and use it to build the kernel;
+#Running makepkg as root is not allowed as it can cause permanent,
+catastrophic damage to your system.
+RUN useradd nonroot -m -d /home/nonroot
+USER nonroot
+WORKDIR /home/nonroot
 
-# configure the kernel
-RUN cp -v /boot/config-* .config
-RUN echo "CONFIG_SND_SOC_INTEL_CHT_CX2072X_MACH=m" >> .config
-RUN echo "CONFIG_SND_SOC_CX2072X=m" >> .config
+# copy the kernel fom AUR git and build it
+RUN git clone https://aur.archlinux.org/linux-cx2072x.git
+WORKDIR linux-cx2072x
+RUN makepkg
 
-# build the kernel
-RUN make deb-pkg -j 8
-
-RUN mkdir /root/build
-RUN cp /root/* /root/build/
+#make a direcotry where we store the prebuild binaries, since docker doesn't support running "docker cp linux*xz"
+RUN mkdir /home/nonroot/package
+RUN mv *.xz /home/nonroot/package
